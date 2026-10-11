@@ -1,0 +1,367 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auth0 - Laboratory 5: JWT and JWE</title>
+  <style>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; padding: 24px 14px; background: #353a42; color: #222; font: 15px/1.45 Arial, sans-serif; }
+    main { max-width: 890px; margin: 18px auto; background: white; border-radius: 10px;
+           padding: 24px; box-shadow: 0 4px 22px #0004; }
+    h1 { font-size: 26px; margin: 0 0 12px; text-align: center; }
+    h2 { font-size: 18px; margin: 0 0 10px; }
+    p { margin: 8px 0; }
+    .muted { color: #586374; font-size: 13px; }
+    .success { color: #14763d; font-weight: 600; }
+    .error { color: #9f2631; font-weight: 600; }
+    .warning { color: #8f600c; font-size: 13px; }
+    #login-box { max-width: 330px; margin: 45px auto; }
+    input, textarea, button { font: inherit; }
+    input:not([type="checkbox"]), textarea { width: 100%; border: 1px solid #bcc5ce; border-radius: 5px;
+                                           padding: 9px; margin: 5px 0 11px; }
+    textarea { min-height: 85px; resize: vertical; font: 12px/1.45 Consolas, monospace; background: #f7f9fa; }
+    #jwt-payload, #decrypted-payload, #modified-payload { min-height: 136px; }
+    #verify-output, #tamper-output { min-height: 180px; }
+    .negative-demo { margin-top: 18px; padding: 14px; border: 1px solid #d8a0a5; border-radius: 5px; background: #fff8f8; }
+    .negative-demo h3 { margin: 0 0 10px; font-size: 17px; }
+    #jwe-output { min-height: 105px; }
+    button { cursor: pointer; background: #303842; color: white; border: 0; border-radius: 5px;
+             padding: 10px 13px; font-weight: 600; }
+    button:hover { background: #19222b; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .secondary { background: white; color: #303842; border: 1px solid #303842; }
+    .secondary:hover { background: #f0f3f5; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .actions button { flex: 1 1 160px; }
+    .panel { margin: 17px 0; border: 1px solid #e2e5e9; padding: 15px; border-radius: 7px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+    label { font-size: 13px; font-weight: 600; }
+    code { overflow-wrap: anywhere; }
+    #logout { color: #375b8c; }
+    #message { min-height: 24px; }
+    @media (max-width: 580px) { main { padding: 14px; } h1 { font-size: 22px; } }
+  </style>
+</head>
+<body>
+<main>
+  <section id="login-box">
+    <h1>Login</h1>
+    <p id="login-error" class="error" role="alert"></p>
+    <form id="login-form">
+      <label for="login-email">Email</label>
+      <input id="login-email" type="email" name="login" autocomplete="username" required>
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" name="password" autocomplete="current-password" required>
+      <button type="submit" style="width:100%">Login</button>
+      <button type="button" id="register-button" class="secondary" style="width:100%;margin-top:9px">Register</button>
+      <p id="register-msg" class="muted" role="status"></p>
+    </form>
+  </section>
+
+  <section id="dashboard" hidden>
+    <div class="row">
+      <h1>Auth0 Authentication - Lab 5</h1>
+      <a href="/logout" id="logout">Logout</a>
+    </div>
+    <p class="success">Login successful</p>
+    <p><strong>User:</strong> <span id="username"></span></p>
+    <p><strong>Refresh token:</strong> <span id="refresh-available"></span></p>
+    <p><strong>Remaining token lifetime:</strong> <span id="token-lifetime"></span></p>
+    <p><strong>Last refresh:</strong> <span id="last-refresh"></span></p>
+    <button type="button" id="check-lifetime" class="secondary">Check token lifetime</button>
+
+    <div class="panel">
+      <h2>1. JWT signature validation - RS256</h2>
+      <p>Public key source: <code id="pem-hint">Auth0 /pem</code></p>
+      <p><strong>Signature:</strong> <span id="jwt-result" class="muted">Awaiting manual verification</span></p>
+      <label for="access-token-info">Access Token (JWT)</label>
+      <textarea id="access-token-info" readonly spellcheck="false"></textarea>
+      <button type="button" id="verify-button">Verify JWT signature</button>
+      <button type="button" id="tamper-button" class="secondary">Negative test: modified JWT</button>
+      <p id="verify-feedback" class="muted" role="status" aria-live="polite"></p>
+      <p id="tamper-result" class="muted" role="status"></p>
+      <label for="verify-output">Verification output (server response)</label>
+      <textarea id="verify-output" readonly spellcheck="false" placeholder="Click Verify JWT signature to receive the verification result."></textarea>
+      <label for="jwt-payload">Original, verified JWT payload</label>
+      <textarea id="jwt-payload" readonly spellcheck="false" placeholder="The payload will appear after a successful manual verification or encryption."></textarea>
+
+      <div id="negative-test-output" class="negative-demo" hidden>
+        <h3>Negative test: modified JWT</h3>
+        <p class="muted">The server modifies the lab5_modified field in the payload and leaves the original signature.</p>
+        <p><strong>Signature of the modified JWT:</strong> <span id="modified-jwt-result" class="muted">Awaiting verification</span></p>
+        <label for="modified-jwt">Modified JWT checked by the server</label>
+        <textarea id="modified-jwt" readonly spellcheck="false"></textarea>
+        <label for="modified-payload">Modified JWT payload</label>
+        <textarea id="modified-payload" readonly spellcheck="false"></textarea>
+        <label for="tamper-output">Server response for the negative test</label>
+        <textarea id="tamper-output" readonly spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>2. JWE encryption of the JWT payload - A256GCM</h2>
+      <button type="button" id="encrypt-button">Encrypt verified payload</button>
+      <p class="muted">Protected header: <code>alg: dir, enc: A256GCM</code></p>
+      <label for="jwe-output">JWE (five dot-separated parts)</label>
+      <textarea id="jwe-output" placeholder="Click Encrypt to obtain the JWE" spellcheck="false"></textarea>
+    </div>
+
+    <div class="panel">
+      <h2>3. JWE decryption and result check</h2>
+      <label for="custom-secret">JWE_SECRET (optional; leave blank to use the key from .env)</label>
+      <input type="password" id="custom-secret" autocomplete="off" placeholder="Base64 key (32 bytes)">
+      <div class="actions">
+        <button type="button" id="decrypt-button">Decrypt JWE and compare</button>
+        <button type="button" id="show-secret-button" class="secondary">Show JWE_SECRET (local demo)</button>
+      </div>
+      <p class="warning">Showing the secret is permitted only when DEMO_SHOW_SECRET=1 and the server runs on localhost. Do not publish this key.</p>
+      <p><strong>Decryption:</strong> <span id="decrypt-result">not started</span></p>
+      <label for="decrypted-payload">Decrypted payload</label>
+      <textarea id="decrypted-payload" readonly spellcheck="false"></textarea>
+    </div>
+    <p id="message" role="status"></p>
+  </section>
+</main>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let displayedAccessToken = null;
+let verificationCount = 0;
+
+function currentSession() {
+  try { return JSON.parse(sessionStorage.getItem('session') || 'null')?.token || null; }
+  catch { return null; }
+}
+
+async function request(url, { method = 'GET', body, signal } = {}) {
+  const headers = {};
+  if (currentSession()) headers.Authorization = currentSession();
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const response = await fetch(url, {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', signal,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || `HTTP ${response.status}`);
+    error.responseData = data;
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function pretty(value) { return JSON.stringify(value, null, 2); }
+
+function text(id, value, className = '') {
+  $(id).textContent = String(value);
+  $(id).className = className;
+}
+
+function showError(e) { text('message', e.message || 'Unexpected error', 'error'); }
+
+function showDashboard(info) {
+  $('login-box').hidden = true;
+  $('dashboard').hidden = false;
+  text('username', info.username || 'unknown');
+  text('refresh-available', info.refreshTokenAvailable ? 'available' : 'not available');
+  text('token-lifetime', `${info.tokenExpiresInSeconds} seconds`);
+  text('last-refresh', info.tokenRefreshed ? 'token refreshed' : 'token is still valid');
+  text('pem-hint', info.publicKeyUrl || 'Auth0 /pem');
+
+  const accessToken = info.accessToken || '';
+  if (accessToken !== displayedAccessToken) {
+    displayedAccessToken = accessToken;
+    verificationCount = 0;
+    text('jwt-result', 'Awaiting manual verification', 'muted');
+    text('verify-feedback', 'Click Verify JWT signature to see the server response.', 'muted');
+    $('verify-output').value = '';
+    $('jwt-payload').value = '';
+    text('tamper-result', '');
+    $('negative-test-output').hidden = true;
+    $('modified-jwt').value = '';
+    $('modified-payload').value = '';
+    $('tamper-output').value = '';
+  }
+
+  $('access-token-info').value = accessToken;
+  $('show-secret-button').disabled = !info.demoCanShowSecret;
+}
+
+async function loadSession() {
+  if (!currentSession()) return;
+  try {
+    const info = await request('/');
+    if (!info.username) throw new Error('Session expired');
+    showDashboard(info);
+  } catch (e) {
+    sessionStorage.removeItem('session');
+    text('login-error', e.message, 'error');
+  }
+}
+
+$('login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  text('login-error', '');
+  try {
+    const data = await request('/api/login', { method: 'POST', body: {
+      login: $('login-email').value, password: $('login-password').value,
+    } });
+    sessionStorage.setItem('session', JSON.stringify(data));
+    await loadSession();
+  } catch (e) { text('login-error', e.message, 'error'); }
+});
+
+$('register-button').addEventListener('click', async () => {
+  text('register-msg', 'Registering...');
+  try {
+    const data = await request('/api/register', { method: 'POST', body: {
+      login: $('login-email').value, password: $('login-password').value,
+    } });
+    text('register-msg', `User created: ${data.email}`, 'success');
+  } catch (e) { text('register-msg', e.message, 'error'); }
+});
+
+$('logout').addEventListener('click', async (event) => {
+  event.preventDefault();
+  try { await request('/logout'); } catch (_) {}
+  sessionStorage.removeItem('session');
+  location.href = '/';
+});
+
+$('check-lifetime').addEventListener('click', async () => {
+  try { showDashboard(await request('/')); text('message', 'Token lifetime updated', 'success'); }
+  catch (e) { showError(e); }
+});
+
+$('verify-button').addEventListener('click', async () => {
+  const button = $('verify-button');
+  if (button.disabled) return;
+  const label = button.textContent;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.textContent = 'Checking...';
+  text('jwt-result', 'CHECKING...', 'muted');
+  text('verify-feedback', 'JWT verification request has been sent to the server.', 'muted');
+  $('verify-output').value = 'GET /api/lab5/verify\nWaiting for server response...';
+  $('jwt-payload').value = '';
+  text('message', '');
+  try {
+    const data = await request('/api/lab5/verify', { signal: controller.signal });
+    $('verify-output').value = pretty(data);
+    if (data.valid !== true) throw new Error('The server did not confirm the JWT validity');
+    text('jwt-result', data.valid ? `VALID (${data.algorithm})` : 'INVALID', data.valid ? 'success' : 'error');
+    $('jwt-payload').value = pretty(data.payload);
+    verificationCount += 1;
+    const checkedAt = new Date().toLocaleTimeString('en-US');
+    text('verify-feedback', `Verification #${verificationCount} completed at ${checkedAt}: the RS256 signature, issuer, audience, and JWT expiration were confirmed by the server.`, 'success');
+    text('message', 'JWT RS256 signature, issuer, audience and expiration verified', 'success');
+  } catch (e) {
+    const message = e.name === 'AbortError'
+      ? 'The server did not respond within 15 seconds. Check whether index.js is running and try again.'
+      : e.message || 'Verification could not be completed';
+    text('jwt-result', 'VERIFICATION FAILED', 'error');
+    text('verify-feedback', message, 'error');
+    $('verify-output').value = pretty(e.responseData || { error: message });
+    showError(new Error(message));
+  } finally {
+    clearTimeout(timeout);
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.textContent = label;
+  }
+});
+
+function showNegativeResult(result) {
+  $('modified-jwt').value = result.modifiedToken || '';
+  $('modified-payload').value = result.modifiedPayload ? pretty(result.modifiedPayload) : '';
+  $('tamper-output').value = pretty(result);
+
+  if (result.rejected === true) {
+    text('modified-jwt-result', 'INVALID - the signature does not match the modified payload', 'error');
+    text('tamper-result', 'PASS: modified JWT was rejected', 'success');
+  } else if (result.valid === true) {
+    text('modified-jwt-result', 'VALID - the modified JWT was incorrectly accepted', 'error');
+    text('tamper-result', 'FAIL: modified JWT was accepted', 'error');
+  } else {
+    text('modified-jwt-result', 'Could not complete verification', 'error');
+    text('tamper-result', result.error || 'Negative test failed', 'error');
+  }
+
+  if (result.rejected === true && !result.modifiedToken) {
+    $('modified-jwt').value = 'To see the token, replace index.js with the updated file and restart the server.';
+  }
+}
+
+$('tamper-button').addEventListener('click', async () => {
+  const button = $('tamper-button');
+  if (button.disabled) return;
+  const label = button.textContent;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  button.disabled = true;
+  button.textContent = 'Checking modified JWT...';
+  $('negative-test-output').hidden = false;
+  $('modified-jwt').value = '';
+  $('modified-payload').value = '';
+  $('tamper-output').value = 'Waiting for server response...';
+  text('modified-jwt-result', 'CHECKING...', 'muted');
+  text('tamper-result', 'Running negative test...', 'muted');
+  try {
+    const result = await request('/api/lab5/tamper-test', { method: 'POST', signal: controller.signal });
+    showNegativeResult(result);
+  } catch (e) {
+    const message = e.name === 'AbortError' ? 'The server did not respond within 15 seconds.' : e.message;
+    showNegativeResult(e.responseData || { error: message });
+  } finally {
+    clearTimeout(timeout);
+    button.disabled = false;
+    button.textContent = label;
+  }
+});
+
+$('encrypt-button').addEventListener('click', async () => {
+  try {
+    const data = await request('/api/lab5/encrypt', { method: 'POST' });
+    $('jwe-output').value = data.jwe;
+    $('jwt-payload').value = pretty(data.originalPayload);
+    $('decrypted-payload').value = '';
+    text('decrypt-result', 'not started');
+    text('message', 'Verified JWT payload encrypted as JWE (dir / A256GCM)', 'success');
+  } catch (e) { showError(e); }
+});
+
+$('decrypt-button').addEventListener('click', async () => {
+  try {
+    const data = await request('/api/lab5/decrypt', { method: 'POST', body: {
+      jwe: $('jwe-output').value.trim(), demoKey: $('custom-secret').value.trim() || undefined,
+    } });
+    $('decrypted-payload').value = pretty(data.decryptedPayload);
+    text('decrypt-result', data.matchesOriginal ? 'SUCCESS - payloads match' : 'DECRYPTED, BUT PAYLOADS DO NOT MATCH',
+         data.matchesOriginal ? 'success' : 'error');
+    text('message', data.matchesOriginal ? 'Original JWT payload === decrypted JWE payload' : 'Mismatch detected',
+         data.matchesOriginal ? 'success' : 'error');
+  } catch (e) {
+    $('decrypted-payload').value = '';
+    text('decrypt-result', `FAILED: ${e.message}`, 'error');
+    showError(e);
+  }
+});
+
+$('show-secret-button').addEventListener('click', async () => {
+  try {
+    const data = await request('/api/lab5/demo-secret');
+    $('custom-secret').type = 'text';
+    $('custom-secret').value = data.secret;
+    text('message', 'Local demo key revealed. Do not share this secret.', 'warning');
+  } catch (e) { showError(e); }
+});
+
+loadSession();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "lab5-token-auth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lab 4 Auth0 app extended with RS256 JWT validation and JWE encryption",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "generate-secret": "node index.js --generate-secret"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "jose": "^6.1.0"
+  },
+  "engines": { "node": ">=20.12.0" }
+}
