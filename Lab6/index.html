@@ -1,20 +1,71 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lab 6 — Auth0 SSO</title>
     <style>
-        body { margin: 0; padding: 40px 20px; background: #3a3a3a; color: #222; font: 16px Arial, sans-serif; }
-        main { max-width: 620px; margin: auto; padding: 30px; border-radius: 8px; background: white; }
-        h1 { margin-top: 0; font-size: 27px; }
-        h2 { font-size: 20px; color: #168b3a; }
-        p { line-height: 1.6; }
-        a { display: inline-block; padding: 12px 18px; border-radius: 5px; background: #3a3a3a; color: white; text-decoration: none; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 30px 18px; background: #3a3a3a; font-family: Arial, sans-serif; color: #222; }
+        main { max-width: 720px; margin: auto; padding: 30px; background: white; border-radius: 8px; }
+        h1 { font-size: 26px; margin-top: 0; }
+        h2 { color: #168b3a; font-size: 20px; }
+        p { line-height: 1.5; overflow-wrap: anywhere; }
+        textarea { width: 100%; min-height: 145px; padding: 12px; font: 12px monospace; resize: vertical; }
+        button { padding: 12px 18px; background: #3a3a3a; color: white; border: 0; border-radius: 5px; cursor: pointer; margin: 12px 0; }
+        button:disabled { opacity: .5; cursor: wait; }
+        .muted { color: #555; font-size: 14px; }
+        #error { color: #a00000; }
     </style>
 </head>
 <body>
-    <main>
-        <h1>Callback</h1>
-    </main>
+<main>
+    <h1>Lab Work No. 6</h1>
+    <h2>Auth0 Universal Login</h2>
+    <p id="status" role="status">Loading session…</p>
+    <section id="details" hidden>
+        <p><strong>User:</strong> <span id="username"></span></p>
+        <p><strong>Grant type:</strong> authorization_code</p>
+        <p><strong>ID token:</strong> RS256 signature, issuer, audience, expiration, and nonce verified</p>
+        <p><strong>Refresh token:</strong> <span id="refresh"></span></p>
+        <p><strong>Time remaining:</strong> <span id="lifetime"></span></p>
+        <p><strong>Refresh status:</strong> <span id="last-refresh"></span></p>
+        <label for="access-token"><strong>Access Token:</strong></label>
+        <textarea id="access-token" readonly spellcheck="false"></textarea>
+        <button type="button" id="check">Check token validity</button>
+        <form method="post" action="/logout">
+            <input type="hidden" name="csrf" id="csrf">
+            <button type="submit">Log out from Auth0</button>
+        </form>
+    </section>
+    <p id="error" role="alert"></p>
+    <a href="/login" id="retry" hidden>Sign in with Auth0</a>
+</main>
+<script>
+    const button = document.getElementById('check');
+    async function checkSession() {
+        button.disabled = true;
+        document.getElementById('error').textContent = '';
+        try {
+            const response = await fetch('/api/session');
+            if (response.status === 401) { location.replace('/login'); return; }
+            if (!response.ok) throw new Error('Failed to load the session. Please try again.');
+            const data = await response.json();
+            document.getElementById('status').textContent = 'Login successful: the code was exchanged for tokens.';
+            document.getElementById('details').hidden = false;
+            document.getElementById('username').textContent = data.username;
+            document.getElementById('refresh').textContent = data.refreshTokenAvailable ? 'received' : 'missing';
+            document.getElementById('lifetime').textContent = `${data.tokenExpiresInSeconds} s`;
+            document.getElementById('last-refresh').textContent = data.tokenRefreshed ? 'token refreshed' : 'token still valid';
+            document.getElementById('access-token').value = data.accessToken;
+            document.getElementById('csrf').value = data.csrfToken;
+        } catch (error) {
+            document.getElementById('error').textContent = error.message;
+            document.getElementById('retry').hidden = false;
+        } finally { button.disabled = false; }
+    }
+    button.addEventListener('click', checkSession);
+    checkSession();
+</script>
 </body>
 </html>
