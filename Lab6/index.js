@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const path = require('node:path');
 const { randomBytes, createHash, timingSafeEqual } = require('node:crypto');
 
@@ -54,7 +55,19 @@ function readConfig() {
 }
 
 const random = () => randomBytes(32).toString('base64url');
-const persist = (req) => new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+const sessionSaves = new Map();
+function persist(req) {
+    const sessionId = req.sessionID;
+    const previous = sessionSaves.get(sessionId) || Promise.resolve();
+    let current;
+    current = previous.catch(() => undefined).then(() => new Promise((resolve, reject) => {
+        req.session.save(error => error ? reject(error) : resolve());
+    })).finally(() => {
+        if (sessionSaves.get(sessionId) === current) sessionSaves.delete(sessionId);
+    });
+    sessionSaves.set(sessionId, current);
+    return current;
+}
 const regenerate = (req) => new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
 const destroy = (req) => new Promise((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
 
@@ -85,6 +98,11 @@ async function createApp(config) {
     app.use(session({
         name: 'lab6.sid',
         secret: config.sessionSecret,
+        store: new FileStore({
+            path: path.join(__dirname, 'sessions'),
+            ttl: 8 * 60 * 60,
+            retries: 0,
+        }),
         resave: false,
         saveUninitialized: false,
         cookie: {
